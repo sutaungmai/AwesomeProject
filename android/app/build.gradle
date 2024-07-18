@@ -77,7 +77,7 @@ android {
     namespace "com.awesomeproject"
     defaultConfig {
         applicationId "com.awesomeproject"
-        minSdkVersion rootProject.ext.minSdkVersion
+        minSdkVersion 28
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1
         versionName "1.0"
@@ -112,6 +112,14 @@ dependencies {
         implementation("com.facebook.react:hermes-android")
     } else {
         implementation jscFlavor
+    }
+}
+
+allprojects {
+    repositories {
+        flatDir {
+            dirs "$rootDir/../node_modules/react-native-star-io10/android/src/lib"
+        }
     }
 }
 
