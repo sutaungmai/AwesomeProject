@@ -1,7 +1,7 @@
 import React from 'react';
 import {useState} from 'react';
 
-import {View, Button, PermissionsAndroid, Platform} from 'react-native';
+import {PermissionsAndroid, Platform} from 'react-native';
 
 import {
   InterfaceType,
@@ -10,37 +10,23 @@ import {
   StarPrinter,
 } from 'react-native-star-io10';
 import WebView from 'react-native-webview';
-
-interface OrderProduct {
-  orderProductId: number;
-  orderId: number;
-  ticketId: number;
-  name: string;
-  unitPriceExVat: number;
-  vatPercent: number;
-  vatCode: string;
-  quantity: number;
-  feeSum: number;
-  eventTicketCategoryId: number;
-  discountPercent: number;
-  organizerFee: number;
-  status: string;
-  comment: string;
-  degreeOfCoverage: number;
-  coverageContribution: number;
-  productGroupUniqueId: string;
-  supplierId: number;
-}
+import {OrderProduct, ReceiptFormat} from './types';
+import {
+  formatDate,
+  formatNumber,
+  formatReceiptItem,
+  formatSubtotal,
+  padString,
+} from './utils';
 
 export default function App() {
-  const [interfaceType, setInterfaceType] = useState(InterfaceType.Bluetooth);
-  const [identifier, setIdentifier] = useState('0012F3273451');
+  const [interfaceType, setInterfaceType] = useState(InterfaceType.Lan);
+  const [identifier, setIdentifier] = useState('0011621D5C1F');
 
   async function printOrder(data: OrderProduct[]) {
     var settings = new StarConnectionSettings();
     settings.interfaceType = interfaceType;
     settings.identifier = identifier;
-    // settings.autoSwitchInterface = true;
 
     // If you are using Android 12 and targetSdkVersion is 31 or later,
     // you have to request Bluetooth permission (Nearby devices permission) to use the Bluetooth printer.
@@ -61,6 +47,40 @@ export default function App() {
       }
     }
 
+    let subTotal = 0;
+    let totalMva = 0;
+    let totalDiscount = 0;
+    const products: ReceiptFormat[] = data.map(product => {
+      subTotal += product.unitPriceExVat * product.quantity;
+      totalMva +=
+        product.unitPriceExVat * product.quantity * (product.vatPercent / 100);
+      totalDiscount +=
+        product.unitPriceExVat *
+        product.quantity *
+        (product.discountPercent / 100);
+      return {
+        name: product.name,
+        quantity: product.quantity,
+        price: product.unitPriceExVat * (1 + product.vatPercent / 100),
+        extras: product.extras.map(extra => {
+          subTotal += extra.unitPriceExVat * extra.quantity;
+
+          totalMva +=
+            extra.unitPriceExVat * extra.quantity * (extra.vatPercent / 100);
+
+          totalDiscount +=
+            extra.unitPriceExVat *
+            extra.quantity *
+            (extra.discountPercent / 100);
+          return {
+            name: extra.name,
+            quantity: extra.quantity * product.quantity,
+            price: extra.unitPriceExVat * (1 + extra.vatPercent / 100),
+          };
+        }),
+      };
+    });
+
     var printer = new StarPrinter(settings);
 
     try {
@@ -69,110 +89,50 @@ export default function App() {
       // For other available methods, please also refer to "Supported Model" of each method.
       // https://www.star-m.jp/products/s_print/sdk/react-native-star-io10/manual/en/api-reference/star-xpand-command/printer-builder/action-print-image.html
       var builder = new StarXpandCommand.StarXpandCommandBuilder();
-      let orderPrintText = '';
-
-      data.forEach(product => {
-        orderPrintText += `${product.name}  ${product.quantity} x ${
-          product.unitPriceExVat * (1 + product.vatPercent / 100)
-        }\n`;
-      });
 
       builder.addDocument(
-        new StarXpandCommand.DocumentBuilder()
-          // To open a cash drawer, comment out the following code.
-          .addDrawer(
-            new StarXpandCommand.DrawerBuilder().actionOpen(
-              new StarXpandCommand.Drawer.OpenParameter(),
-            ),
-          )
-          .addPrinter(
-            new StarXpandCommand.PrinterBuilder()
-              // .actionPrintImage(
-              //   new StarXpandCommand.Printer.ImageParameter('logo_01.png', 406),
-              // )
-              // .styleInternationalCharacter(
-              //   StarXpandCommand.Printer.InternationalCharacterType.Usa,
-              // )
-              // .styleCharacterSpace(0)
-              // .styleAlignment(StarXpandCommand.Printer.Alignment.Center)
-              // .actionPrintText(
-              //   'Star Clothing Boutique\n' +
-              //     '123 Star Road\n' +
-              //     'City, State 12345\n' +
-              //     '\n',
-              // )
-              // .styleAlignment(StarXpandCommand.Printer.Alignment.Left)
-              // .actionPrintText(
-              //   'Date:MM/DD/YYYY    Time:HH:MM PM\n' +
-              //     '--------------------------------\n' +
-              //     '\n',
-              // )
-              .actionPrintText('Product    Quantity    Total\n')
-              .actionPrintText(
-                orderPrintText,
-                // '300678566   PLAIN T-SHIRT  10.99\n' +
-                // '300692003   BLACK DENIM    29.99\n' +
-                // '300651148   BLUE DENIM     29.99\n' +
-                // '300642980   STRIPED DRESS  49.99\n' +
-                // '300638471   BLACK BOOTS    35.99\n' +
-              )
-              // .actionPrintText(
-              //   '\n' +
-              //     'Subtotal                  156.95\n' +
-              //     'Tax                         0.00\n' +
-              //     '--------------------------------\n',
-              // )
-              // .actionPrintText('Total     ')
-              // .add(
-              //   new StarXpandCommand.PrinterBuilder()
-              //     .styleMagnification(
-              //       new StarXpandCommand.MagnificationParameter(2, 2),
-              //     )
-              //     .actionPrintText('   $156.95\n'),
-              // )
-              // .actionPrintText(
-              //   '--------------------------------\n' +
-              //     '\n' +
-              //     'Charge\n' +
-              //     '156.95\n' +
-              //     'Visa XXXX-XXXX-XXXX-0123\n' +
-              //     '\n',
-              // )
-              // .add(
-              //   new StarXpandCommand.PrinterBuilder()
-              //     .styleInvert(true)
-              //     .actionPrintText('Refunds and Exchanges\n'),
-              // )
-              // .actionPrintText('Within ')
-              // .add(
-              //   new StarXpandCommand.PrinterBuilder()
-              //     .styleUnderLine(true)
-              //     .actionPrintText('30 days'),
-              // )
-              // .actionPrintText(' with receipt\n')
-              // .actionPrintText('And tags attached\n' + '\n')
-              // .styleAlignment(StarXpandCommand.Printer.Alignment.Center)
-              // .actionPrintBarcode(
-              //   new StarXpandCommand.Printer.BarcodeParameter(
-              //     '0123456',
-              //     StarXpandCommand.Printer.BarcodeSymbology.Jan8,
-              //   )
-              //     .setBarDots(3)
-              //     .setBarRatioLevel(
-              //       StarXpandCommand.Printer.BarcodeBarRatioLevel.Level0,
-              //     )
-              //     .setHeight(5)
-              //     .setPrintHri(true),
-              // )
-              // .actionFeedLine(1)
-              // .actionPrintQRCode(
-              //   new StarXpandCommand.Printer.QRCodeParameter('Hello World.\n')
-              //     .setModel(StarXpandCommand.Printer.QRCodeModel.Model2)
-              //     .setLevel(StarXpandCommand.Printer.QRCodeLevel.L)
-              //     .setCellSize(8),
-              // )
-              .actionCut(StarXpandCommand.Printer.CutType.Partial),
-          ),
+        new StarXpandCommand.DocumentBuilder().addPrinter(
+          new StarXpandCommand.PrinterBuilder()
+            .styleAlignment(StarXpandCommand.Printer.Alignment.Center)
+            .actionPrintImage(
+              new StarXpandCommand.Printer.ImageParameter('buylink.png', 250),
+            )
+            .actionPrintText(
+              '\nKlæbuveien 122 ' +
+                '\n7031, Trondheim' +
+                '\nBuylink AS' +
+                `\n${formatDate(new Date())}`,
+            )
+            .styleAlignment(StarXpandCommand.Printer.Alignment.Center)
+            .styleAlignment(StarXpandCommand.Printer.Alignment.Left)
+            .styleBold(true)
+            .actionPrintText(
+              'Product                         Qty      Unit pr\n',
+            )
+            .styleBold(false)
+            .styleFont(StarXpandCommand.Printer.FontType.B)
+            .actionPrintText(formatReceiptItem(products))
+            .actionPrintText(
+              formatSubtotal(
+                formatNumber(subTotal + totalMva),
+                formatNumber(totalMva),
+                formatNumber(totalDiscount),
+              ),
+            )
+            .styleFont(StarXpandCommand.Printer.FontType.A)
+            .actionPrintText(padString('\nTotal', 28))
+            .add(
+              new StarXpandCommand.PrinterBuilder()
+                .styleMagnification(
+                  new StarXpandCommand.MagnificationParameter(2, 2),
+                )
+                .actionPrintText(
+                  padString(`${formatNumber(subTotal + totalMva)}`, 10, true) +
+                    '\n',
+                ),
+            )
+            .actionCut(StarXpandCommand.Printer.CutType.Partial),
+        ),
       );
 
       var commands = await builder.getCommands();
@@ -261,6 +221,8 @@ export default function App() {
 
         hasPermission = status == PermissionsAndroid.RESULTS.GRANTED;
       }
+
+      console.log(`hasPermission: ${hasPermission}`);
     } catch (err) {
       console.warn(err);
     }
@@ -291,15 +253,6 @@ export default function App() {
       style={{flex: 1}}
       onMessage={onMessage}
       setSupportMultipleWindows={false}
-      // javaScriptEnabled={true}
     />
-    // <View style={{margin: 50}}>
-    //   <View style={{width: 100, marginTop: 20}}>
-    //     <Button title="Print" onPress={printOrder} />
-    //   </View>
-    //   <View style={{width: 100, marginTop: 20}}>
-    //     <Button title="Open Drawer" onPress={_onPressOpenCashDrawerButton} />
-    //   </View>
-    // </View>
   );
 }
