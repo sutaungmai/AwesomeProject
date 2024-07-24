@@ -21,12 +21,12 @@ import {
 
 export default function App() {
   const [interfaceType, setInterfaceType] = useState(InterfaceType.Lan);
-  const [identifier, setIdentifier] = useState('0011621D5C1F');
+  const [identifier, setIdentifier] = useState('');
 
-  async function printOrder(data: OrderProduct[]) {
+  async function printOrder(data: OrderProduct[], ip?: string) {
     var settings = new StarConnectionSettings();
     settings.interfaceType = interfaceType;
-    settings.identifier = identifier;
+    settings.identifier = ip || identifier;
 
     // If you are using Android 12 and targetSdkVersion is 31 or later,
     // you have to request Bluetooth permission (Nearby devices permission) to use the Bluetooth printer.
@@ -39,7 +39,7 @@ export default function App() {
         var hasPermission = await _confirmBluetoothPermission();
 
         if (!hasPermission) {
-          console.log(
+          console.error(
             `PERMISSION ERROR: You have to allow Nearby devices to use the Bluetooth printer`,
           );
           return;
@@ -139,10 +139,8 @@ export default function App() {
 
       await printer.open();
       await printer.print(commands);
-
-      console.log(`Success`);
     } catch (error) {
-      console.log(`Error: ${String(error)}`);
+      console.error(`Error: ${String(error)}`);
     } finally {
       await printer.close();
       await printer.dispose();
@@ -166,7 +164,7 @@ export default function App() {
         var hasPermission = await _confirmBluetoothPermission();
 
         if (!hasPermission) {
-          console.log(
+          console.error(
             `PERMISSION ERROR: You have to allow Nearby devices to use the Bluetooth printer`,
           );
           return;
@@ -196,10 +194,8 @@ export default function App() {
 
       await printer.open();
       await printer.print(commands);
-
-      console.log(`Success`);
     } catch (error) {
-      console.log(`Error: ${String(error)}`);
+      console.error(`Error: ${String(error)}`);
     } finally {
       await printer.close();
       await printer.dispose();
@@ -222,7 +218,7 @@ export default function App() {
         hasPermission = status == PermissionsAndroid.RESULTS.GRANTED;
       }
 
-      console.log(`hasPermission: ${hasPermission}`);
+      console.error(`hasPermission: ${hasPermission}`);
     } catch (err) {
       console.warn(err);
     }
@@ -231,11 +227,20 @@ export default function App() {
   }
 
   const onMessage = (event: any) => {
-    const message = JSON.parse(event.nativeEvent.data);
+    const message: {
+      action: 'print_order' | 'open_drawer';
+      data: OrderProduct[];
+      ip: string;
+    } = JSON.parse(event.nativeEvent.data);
     if (!message) return;
 
-    if (message.action == 'print_order' && message.data.length > 0) {
-      printOrder(message.data);
+    if (
+      message.action == 'print_order' &&
+      message.data.length > 0 &&
+      message.ip &&
+      message.ip !== ''
+    ) {
+      printOrder(message.data, message.ip);
     }
 
     if (message.action == 'open_drawer') {

@@ -75,7 +75,6 @@ export function formatReceiptItem(products: ReceiptFormat[]) {
 
     product.extras.forEach(extra => {
       let extraProduct = '  ' + extra.name;
-      console.log(extra);
       const extraLines = [];
       while (extraProduct.length > productColumnWidth) {
         let line = extraProduct.slice(0, productColumnWidth);
