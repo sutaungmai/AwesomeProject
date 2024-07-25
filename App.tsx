@@ -1,4 +1,6 @@
-import React from 'react';
+<script src="http://localhost:8097"></script>;
+
+import React, {useEffect} from 'react';
 import {useState} from 'react';
 
 import {PermissionsAndroid, Platform} from 'react-native';
@@ -8,6 +10,8 @@ import {
   StarConnectionSettings,
   StarXpandCommand,
   StarPrinter,
+  StarDeviceDiscoveryManager,
+  StarDeviceDiscoveryManagerFactory,
 } from 'react-native-star-io10';
 import WebView from 'react-native-webview';
 import {OrderProduct, ReceiptFormat} from './types';
@@ -20,8 +24,65 @@ import {
 } from './utils';
 
 export default function App() {
+  const webviewRef = React.useRef(null);
   const [interfaceType, setInterfaceType] = useState(InterfaceType.Lan);
   const [identifier, setIdentifier] = useState('');
+  const [lanIsEnabled, setLanIsEnabled] = useState(true);
+  const [manager, setManager] = useState<
+    StarDeviceDiscoveryManager | undefined
+  >(undefined);
+
+  async function printerDiscovery() {
+    try {
+      await manager?.stopDiscovery();
+
+      var interfaceTypes: Array<InterfaceType> = [];
+      if (lanIsEnabled) {
+        interfaceTypes.push(InterfaceType.Lan);
+      }
+      setManager(
+        await StarDeviceDiscoveryManagerFactory.create(interfaceTypes),
+      );
+    } catch (error) {
+      console.log(`Error: ${String(error)}`);
+    }
+  }
+
+  useEffect(() => {
+    const _startDiscovery = async () => {
+      if (manager != undefined) {
+        manager.discoveryTime = 10000;
+
+        const printers: {name: string; ipAddress: string}[] = [];
+        manager.onPrinterFound = async (printer: StarPrinter) => {
+          const info = printer._information?.reserved;
+          if (info) {
+            const requiredPrinterInfo = {
+              name: info.get('name'),
+              ipAddress: info.get('ipAddress'),
+            };
+
+            printers.push(requiredPrinterInfo);
+          }
+        };
+
+        manager.onDiscoveryFinished = () => {
+          if (webviewRef.current) {
+            (webviewRef.current as any).postMessage(JSON.stringify(printers));
+          }
+          console.log(`Discovery finished.`);
+        };
+
+        try {
+          console.log(`Discovery start.`);
+          await manager.startDiscovery();
+        } catch (error) {
+          console.log(`Error: ${String(error)}`);
+        }
+      }
+    };
+    _startDiscovery();
+  }, [manager]);
 
   async function printOrder(data: OrderProduct[], ip?: string) {
     var settings = new StarConnectionSettings();
@@ -279,7 +340,7 @@ export default function App() {
 
   const onMessage = (event: any) => {
     const message: {
-      action: 'print_order' | 'open_drawer' | 'test';
+      action: 'print_order' | 'open_drawer' | 'test' | 'discovery';
       data: OrderProduct[];
       ip: string;
     } = JSON.parse(event.nativeEvent.data);
@@ -301,10 +362,15 @@ export default function App() {
     if (message.action === 'test' && message.ip && message.ip !== '') {
       testPrint(message.ip);
     }
+
+    if (message.action === 'discovery') {
+      printerDiscovery();
+    }
   };
 
   return (
     <WebView
+      ref={webviewRef}
       source={{
         uri: '192.168.1.36',
       }}
