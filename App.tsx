@@ -103,7 +103,6 @@ export default function App() {
                 '\nBuylink AS' +
                 `\n${formatDate(new Date())}`,
             )
-            .styleAlignment(StarXpandCommand.Printer.Alignment.Center)
             .styleAlignment(StarXpandCommand.Printer.Alignment.Left)
             .styleBold(true)
             .actionPrintText(
@@ -131,6 +130,60 @@ export default function App() {
                     '\n',
                 ),
             )
+            .actionCut(StarXpandCommand.Printer.CutType.Partial),
+        ),
+      );
+
+      var commands = await builder.getCommands();
+
+      await printer.open();
+      await printer.print(commands);
+    } catch (error) {
+      console.error(`Error: ${String(error)}`);
+    } finally {
+      await printer.close();
+      await printer.dispose();
+    }
+  }
+
+  async function testPrint(ip?: string) {
+    var settings = new StarConnectionSettings();
+    settings.interfaceType = interfaceType;
+    settings.identifier = ip || identifier;
+
+    // If you are using Android 12 and targetSdkVersion is 31 or later,
+    // you have to request Bluetooth permission (Nearby devices permission) to use the Bluetooth printer.
+    // https://developer.android.com/about/versions/12/features/bluetooth-permissions
+    if (Platform.OS == 'android' && 31 <= Platform.Version) {
+      if (
+        interfaceType == InterfaceType.Bluetooth ||
+        settings.autoSwitchInterface == true
+      ) {
+        var hasPermission = await _confirmBluetoothPermission();
+
+        if (!hasPermission) {
+          console.error(
+            `PERMISSION ERROR: You have to allow Nearby devices to use the Bluetooth printer`,
+          );
+          return;
+        }
+      }
+    }
+
+    var printer = new StarPrinter(settings);
+
+    try {
+      // TSP100III series and TSP100IIU+ do not support actionPrintText because these products are graphics-only printers.
+      // Please use the actionPrintImage method to create printing data for these products.
+      // For other available methods, please also refer to "Supported Model" of each method.
+      // https://www.star-m.jp/products/s_print/sdk/react-native-star-io10/manual/en/api-reference/star-xpand-command/printer-builder/action-print-image.html
+      var builder = new StarXpandCommand.StarXpandCommandBuilder();
+
+      builder.addDocument(
+        new StarXpandCommand.DocumentBuilder().addPrinter(
+          new StarXpandCommand.PrinterBuilder()
+            .styleAlignment(StarXpandCommand.Printer.Alignment.Center)
+            .actionPrintText('Hello World\n')
             .actionCut(StarXpandCommand.Printer.CutType.Partial),
         ),
       );
@@ -217,8 +270,6 @@ export default function App() {
 
         hasPermission = status == PermissionsAndroid.RESULTS.GRANTED;
       }
-
-      console.error(`hasPermission: ${hasPermission}`);
     } catch (err) {
       console.warn(err);
     }
@@ -228,7 +279,7 @@ export default function App() {
 
   const onMessage = (event: any) => {
     const message: {
-      action: 'print_order' | 'open_drawer';
+      action: 'print_order' | 'open_drawer' | 'test';
       data: OrderProduct[];
       ip: string;
     } = JSON.parse(event.nativeEvent.data);
@@ -246,8 +297,10 @@ export default function App() {
     if (message.action == 'open_drawer') {
       _onPressOpenCashDrawerButton();
     }
-    // _onPressOpenCashDrawerButton();
-    // Handle the data received from the WebView here
+
+    if (message.action === 'test' && message.ip && message.ip !== '') {
+      testPrint(message.ip);
+    }
   };
 
   return (
